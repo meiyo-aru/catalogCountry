@@ -24,3 +24,7 @@ class rest_countries_model(BaseModel):
     dislikes: int = 0
     class Config:
         extra = "ignore"
+        
+class paises_avaliar(BaseModel):
+    name: str
+    rating: str
