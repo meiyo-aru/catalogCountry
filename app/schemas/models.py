@@ -20,5 +20,7 @@ class rest_countries_model(BaseModel):
     languages: dict
     capital: list | None = None
     currencies: dict | None = None
+    likes: int = 0
+    dislikes: int = 0
     class Config:
         extra = "ignore"
