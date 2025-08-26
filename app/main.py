@@ -38,7 +38,7 @@ async def buscar(name: str, db: Session = Depends(get_db)):
 @app.get("/paises/top10", status_code=status.HTTP_200_OK, response_model=List[rest_countries_model])
 async def top10(db: Session = Depends(get_db)):
     
-    response = requests.get('https://restcountries.com/v3.1/all?fields=name,population,independent,region,subregion,languages,capital,currencies') # faz a requisição para a API externa
+    response = requests.get('https://restcountries.com/v3.1/all?fields=name,population,independent,region,subregion,languages,capital,currencies,continents') # faz a requisição para a API externa
     
     # validacao de erro na requisição
     if response.status_code != 200:
@@ -54,7 +54,9 @@ async def top10(db: Session = Depends(get_db)):
     for country in sorted_countries: # para cada país na lista, consulta o banco de dados para obter likes e dislikes
         model = rest_countries_model.model_validate(country) # valida os dados da api externa, excluindo os campos que não existem no modelo pydantic
         
-        data = db.query(countries).filter(countries.name == model.name['common']).first() # busca o país no banco de dados
+        data = db.query(countries).filter(countries.name.ilike(model.name['common'])).first()# busca o país no banco de dados
+        print("model name:  " + model.name['common'])
+        
         if data is None:
             setattr(model, 'likes', 0)      # se o país não existir no banco, define likes e dislikes como 0
             setattr(model, 'dislikes', 0)
@@ -99,5 +101,11 @@ async def avaliar(avaliacao: paises_avaliar, db: Session = Depends(get_db)):
     
         db.commit() # salva as alterações no banco de dados
         db.refresh(data) # atualiza o objeto com os dados do banco de dados
-        
+    
+    setattr(data, "total_votes", data.dislikes + data.likes)
+    delattr(data, "likes")
+    delattr(data, "dislikes")
+    delattr(data, "id")
+    setattr(data, "status", "200 OK")
+
     return data
