@@ -17,6 +17,7 @@ class rest_countries_model(BaseModel):
     independent: bool
     region: str
     subregion: str
+    continents: list
     languages: dict
     capital: list | None = None
     currencies: dict | None = None
@@ -24,3 +25,8 @@ class rest_countries_model(BaseModel):
     dislikes: int = 0
     class Config:
         extra = "ignore"
+        
+class paises_avaliar(BaseModel):
+    name: str
+    rating: str
+    
