@@ -7,23 +7,32 @@ from app.api.create_app import Session, Depends
 from app.schemas.models import countries_base, countries_out, paises_avaliar, rest_countries_model
 from fastapi import status, HTTPException
 
-# Endpoint para buscar país pelo nome, retornando o modelo pydantic countries_out
+def send_request(url: str, parameters: dict={}, timeout: int = 60) -> List:
+    try:
+        response = requests.get(url=url, params=parameters, timeout=timeout) # faz a requisição para a API externa
+        response.raise_for_status() # Levanta um HTTPError se a resposta for um sucesso
+        data = response.json()
+        print(data)
+    except requests.exceptions.ConnectionError as e:
+        # Lida com erros de conexão
+        raise Exception(f"Erro de Conexão: Verifique sua conexão com a internet. Detalhes: {e}")
+    except requests.exceptions.Timeout as e:
+        # Lida com erros de tempo limite da requisição
+        raise Exception(f"Erro de Tempo Limite: O servidor demorou demais para responder. Detalhes: {e}")
+    except requests.exceptions.HTTPError as e:
+        # Lida com erros HTTP
+        raise HTTPException(status_code=e.response.status_code, detail=f"Erro HTTP: O servidor retornou um erro. Detalhes: {e}")
+
+    return data
+
+# Endpoint para buscar país pelo nome, retornando o modelo pydantic rest_countries_model
 @app.get("/paises/buscar", status_code=status.HTTP_200_OK, response_model=rest_countries_model)
 async def buscar(name: str, db: Session = Depends(get_db)):
+    response = send_request(url='https://restcountries.com/v3.1/name/' + name.strip(), parameters={"fullText": "true"})[0]  # chama a funcao de envio de requisicao e pega o primeiro elemento da lista
     
-    response = requests.get('https://restcountries.com/v3.1/name/' + name.strip() + '?fullText=true') # faz a requisição para a API externa
+    model = rest_countries_model.model_validate(response)  # valida os dados da api externa, excluindo os campos que não existem no modelo pydantic
     
-    # Se o país não for encontrado na API externa, retorna 404
-    if response.status_code == 404:
-        raise HTTPException(status_code=404, detail="País não encontrado.")        
-
-    elif response.status_code != 200:
-        raise HTTPException(status_code=400, detail="Falha na requisição.")        
-    
-    
-    model = rest_countries_model.model_validate(response.json()[0])  # valida os dados da api externa, excluindo os campos que não existem no modelo pydantic
-    
-    data = db.query(countries).filter(countries.name == name.strip()).first() # busca o país no banco de dados
+    data = db.query(countries).filter(countries.name == response['name']['common']).first() # busca o país no banco de dados
     if data is None:
         setattr(model, 'likes', 0)      # se o país não existir no banco, define likes e dislikes como 0
         setattr(model, 'dislikes', 0)
@@ -37,16 +46,11 @@ async def buscar(name: str, db: Session = Depends(get_db)):
 # Endpoint para listar os 10 paises mais populosos
 @app.get("/paises/top10", status_code=status.HTTP_200_OK, response_model=List[rest_countries_model])
 async def top10(db: Session = Depends(get_db)):
-    
-    response = requests.get('https://restcountries.com/v3.1/all?fields=name,population,independent,region,subregion,languages,capital,currencies,continents') # faz a requisição para a API externa
-    
-    # validacao de erro na requisição
-    if response.status_code != 200:
-        raise HTTPException(status_code=400, detail="Falha na requisição.")        
-    
+    response = send_request(url='https://restcountries.com/v3.1/all', parameters={"fields": "name,population,independent,region,subregion,languages,capital,currencies,continents"}) # chama a funcao de envio de requisicao
+     
     # ordena os países pela população em ordem decrescente e pega os 10 primeiros
     sorted_countries = sorted(
-        response.json(),
+        response,
         key=lambda pais: pais['population'], # ordena pela população
         reverse=True  # 'reverse=True' para ordenar do maior para o menor
     )[0:10]
@@ -72,19 +76,13 @@ async def top10(db: Session = Depends(get_db)):
 @app.post("/paises/avaliar", status_code=status.HTTP_200_OK)
 async def avaliar(avaliacao: paises_avaliar, db: Session = Depends(get_db)):
     
-    response = requests.get('https://restcountries.com/v3.1/name/' + avaliacao.name.strip() + '?fields=name') # faz a requisição para a API externa
+    response = send_request(url='https://restcountries.com/v3.1/name/' + avaliacao.name.strip(), parameters={"fields":"name"})[0] # chama a funcao de envio de requisicao e pega o primeiro elemento da lista (RestCountries sempre retorna uma lista)
     
-    # validacao de erro na requisição
-    if response.status_code == 404:
-        raise HTTPException(status_code=404, detail="País não encontrado.")
-    elif response.status_code != 200:
-        raise HTTPException(status_code=400, detail="Falha na requisição.")        
-
-    data = db.query(countries).filter(countries.name == avaliacao.name.strip()).first() # busca o país no banco de dados
+    data = db.query(countries).filter(countries.name == response['name']['common']).first() # busca o país no banco de dados
     
     # se o país nao existir no banco, cria um novo registro com 1 like ou 1 dislike dependendo da avaliação
     if data is None:
-        data = countries(name=avaliacao.name.strip(), likes=(1 if avaliacao.rating == "curti" else 0), dislikes=(1 if avaliacao.rating == "não curti" else 0))
+        data = countries(name=response['name']['common'], likes=(1 if avaliacao.rating == "curti" else 0), dislikes=(1 if avaliacao.rating == "não curti" else 0))
         
         db.add(data) # adiciona o novo país na sessão
         db.flush() # forca a execução do insert
