@@ -24,7 +24,7 @@ def send_request(url: str, parameters: dict={}, timeout: int = 60) -> List:
 
     return data
 
-def set_avaliacao(data, model):
+def set_rating(data, model):
     if data is None:
         setattr(model, 'likes', 0)      # se o país não existir no banco, define likes e dislikes como 0
         setattr(model, 'dislikes', 0)
@@ -35,12 +35,12 @@ def set_avaliacao(data, model):
 
 # Endpoint para buscar país pelo nome, retornando o modelo pydantic rest_countries_model
 @app.get("/paises/buscar", status_code=status.HTTP_200_OK, response_model=rest_countries_model)
-async def buscar(name: str, db: Session = Depends(get_db)):
+async def find(name: str, db: Session = Depends(get_db)):
     response = send_request(url='https://restcountries.com/v3.1/name/' + name.strip(), parameters={"fullText": "true"})[0]  # chama a funcao de envio de requisicao e pega o primeiro elemento da lista
     model = rest_countries_model.model_validate(response)  # valida os dados da api externa, excluindo os campos que não existem no modelo pydantic
     
     data = db.query(countries).filter(countries.name == model.name).first() # busca o país no banco de dados
-    set_avaliacao(data, model)
+    set_rating(data, model)
         
     return model
 
@@ -61,7 +61,7 @@ async def top10(db: Session = Depends(get_db)):
         model = rest_countries_model.model_validate(country) # valida os dados da api externa, excluindo os campos que não existem no modelo pydantic
         
         data = db.query(countries).filter(countries.name == model.name).first()# busca o país no banco de dados    
-        set_avaliacao(data, model)
+        set_rating(data, model)
 
         sorted_countries[sorted_countries.index(country)] = model # atualiza a lista com o modelo pydantic convertido em dicionário
         
@@ -69,7 +69,7 @@ async def top10(db: Session = Depends(get_db)):
 
 # Endpoint para avaliar os países
 @app.post("/paises/avaliar", status_code=status.HTTP_200_OK)
-async def avaliar(avaliacao: rating_model, db: Session = Depends(get_db)):
+async def rate(avaliacao: rating_model, db: Session = Depends(get_db)):
     
     response = send_request(url='https://restcountries.com/v3.1/name/' + avaliacao.name.strip(), parameters={"fields":"name,population,region"})[0] # chama a funcao de envio de requisicao e pega o primeiro elemento da lista (RestCountries sempre retorna uma lista)
     model = rest_countries_model.model_validate(response)
