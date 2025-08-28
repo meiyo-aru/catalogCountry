@@ -4,7 +4,7 @@ from app.models.models import countries
 from app.db.connect_db import get_db
 from app.api.create_app import app
 from app.api.create_app import Session, Depends
-from app.schemas.models import paises_avaliar, rest_countries_model
+from app.schemas.models import rating_model, rating_response_model, rest_countries_model
 from fastapi import status, HTTPException
 
 def send_request(url: str, parameters: dict={}, timeout: int = 60) -> List:
@@ -24,14 +24,7 @@ def send_request(url: str, parameters: dict={}, timeout: int = 60) -> List:
 
     return data
 
-# Endpoint para buscar país pelo nome, retornando o modelo pydantic rest_countries_model
-@app.get("/paises/buscar", status_code=status.HTTP_200_OK, response_model=rest_countries_model)
-async def buscar(name: str, db: Session = Depends(get_db)):
-    response = send_request(url='https://restcountries.com/v3.1/name/' + name.strip(), parameters={"fullText": "true"})[0]  # chama a funcao de envio de requisicao e pega o primeiro elemento da lista
-    
-    model = rest_countries_model.model_validate(response)  # valida os dados da api externa, excluindo os campos que não existem no modelo pydantic
-    
-    data = db.query(countries).filter(countries.name == response['name']['common']).first() # busca o país no banco de dados
+def set_avaliacao(data, model):
     if data is None:
         setattr(model, 'likes', 0)      # se o país não existir no banco, define likes e dislikes como 0
         setattr(model, 'dislikes', 0)
@@ -39,13 +32,23 @@ async def buscar(name: str, db: Session = Depends(get_db)):
         setattr(model, 'likes', data.likes)        # se o país existir no banco, define likes e dislikes com os valores do banco
         setattr(model, 'dislikes', data.dislikes)
         
+
+# Endpoint para buscar país pelo nome, retornando o modelo pydantic rest_countries_model
+@app.get("/paises/buscar", status_code=status.HTTP_200_OK, response_model=rest_countries_model)
+async def buscar(name: str, db: Session = Depends(get_db)):
+    response = send_request(url='https://restcountries.com/v3.1/name/' + name.strip(), parameters={"fullText": "true"})[0]  # chama a funcao de envio de requisicao e pega o primeiro elemento da lista
+    model = rest_countries_model.model_validate(response)  # valida os dados da api externa, excluindo os campos que não existem no modelo pydantic
+    
+    data = db.query(countries).filter(countries.name == model.name).first() # busca o país no banco de dados
+    set_avaliacao(data, model)
+        
     return model
 
 
 # Endpoint para listar os 10 paises mais populosos
 @app.get("/paises/top10", status_code=status.HTTP_200_OK, response_model=List[rest_countries_model])
 async def top10(db: Session = Depends(get_db)):
-    response = send_request(url='https://restcountries.com/v3.1/all', parameters={"fields": "name,population,independent,region,subregion,languages,capital,currencies,continents"}) # chama a funcao de envio de requisicao
+    response = send_request(url='https://restcountries.com/v3.1/all', parameters={"fields": "name,population,region"}) # chama a funcao de envio de requisicao
      
     # ordena os países pela população em ordem decrescente e pega os 10 primeiros
     sorted_countries = sorted(
@@ -57,30 +60,24 @@ async def top10(db: Session = Depends(get_db)):
     for country in sorted_countries: # para cada país na lista, consulta o banco de dados para obter likes e dislikes
         model = rest_countries_model.model_validate(country) # valida os dados da api externa, excluindo os campos que não existem no modelo pydantic
         
-        data = db.query(countries).filter(countries.name.ilike(model.name['common'])).first()# busca o país no banco de dados
-        
-        if data is None:
-            setattr(model, 'likes', 0)      # se o país não existir no banco, define likes e dislikes como 0
-            setattr(model, 'dislikes', 0)
-        else:
-            setattr(model, 'likes', data.likes)        # se o país existir no banco, define likes e dislikes com os valores do banco
-            setattr(model, 'dislikes', data.dislikes)
-        
+        data = db.query(countries).filter(countries.name == model.name).first()# busca o país no banco de dados    
+        set_avaliacao(data, model)
+
         sorted_countries[sorted_countries.index(country)] = model # atualiza a lista com o modelo pydantic convertido em dicionário
         
     return sorted_countries
 
 # Endpoint para avaliar os países
 @app.post("/paises/avaliar", status_code=status.HTTP_200_OK)
-async def avaliar(avaliacao: paises_avaliar, db: Session = Depends(get_db)):
+async def avaliar(avaliacao: rating_model, db: Session = Depends(get_db)):
     
-    response = send_request(url='https://restcountries.com/v3.1/name/' + avaliacao.name.strip(), parameters={"fields":"name"})[0] # chama a funcao de envio de requisicao e pega o primeiro elemento da lista (RestCountries sempre retorna uma lista)
-    
-    data = db.query(countries).filter(countries.name == response['name']['common']).first() # busca o país no banco de dados
+    response = send_request(url='https://restcountries.com/v3.1/name/' + avaliacao.name.strip(), parameters={"fields":"name,population,region"})[0] # chama a funcao de envio de requisicao e pega o primeiro elemento da lista (RestCountries sempre retorna uma lista)
+    model = rest_countries_model.model_validate(response)
+    data = db.query(countries).filter(countries.name == model.name).first() # busca o país no banco de dados
     
     # se o país nao existir no banco, cria um novo registro com 1 like ou 1 dislike dependendo da avaliação
     if data is None:
-        data = countries(name=response['name']['common'], likes=(1 if avaliacao.rating == "curti" else 0), dislikes=(1 if avaliacao.rating == "não curti" else 0))
+        data = countries(name=model.name, likes=(1 if avaliacao.rating == "curti" else 0), dislikes=(1 if avaliacao.rating == "não curti" else 0))
         
         db.add(data) # adiciona o novo país na sessão
         db.flush() # forca a execução do insert
@@ -97,11 +94,5 @@ async def avaliar(avaliacao: paises_avaliar, db: Session = Depends(get_db)):
     
         db.commit() # salva as alterações no banco de dados
         db.refresh(data) # atualiza o objeto com os dados do banco de dados
-    
-    setattr(data, "total_votes", data.dislikes + data.likes)
-    delattr(data, "likes")
-    delattr(data, "dislikes")
-    delattr(data, "id")
-    setattr(data, "status", "200 OK")
 
-    return data
+    return rating_response_model(name=getattr(data, 'name'), total_votes=getattr(data, 'dislikes') + getattr(data, 'likes'), status="200 OK")
