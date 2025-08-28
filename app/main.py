@@ -12,7 +12,6 @@ def send_request(url: str, parameters: dict={}, timeout: int = 60) -> List:
         response = requests.get(url=url, params=parameters, timeout=timeout) # faz a requisição para a API externa
         response.raise_for_status() # Levanta um HTTPError se a resposta for um sucesso
         data = response.json()
-        print(data)
     except requests.exceptions.ConnectionError as e:
         # Lida com erros de conexão
         raise Exception(f"Erro de Conexão: Verifique sua conexão com a internet. Detalhes: {e}")
@@ -59,7 +58,6 @@ async def top10(db: Session = Depends(get_db)):
         model = rest_countries_model.model_validate(country) # valida os dados da api externa, excluindo os campos que não existem no modelo pydantic
         
         data = db.query(countries).filter(countries.name.ilike(model.name['common'])).first()# busca o país no banco de dados
-        print("model name:  " + model.name['common'])
         
         if data is None:
             setattr(model, 'likes', 0)      # se o país não existir no banco, define likes e dislikes como 0
