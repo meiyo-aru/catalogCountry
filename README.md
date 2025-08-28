@@ -6,8 +6,15 @@ Este projeto é uma **API** desenvolvida em Python com FastAPI, com o objetivo d
 
 ## Informações importantes
 
+- O projeto utiliza um arquivo .env com as credenciais do Supabase/PostgreSQL. Por motivos de segurança eu não o subi para o GitHub.
+  - Exemplo de arquivo .env:
+    
+    ```.env
+      DATABASE_URL=postgresql://postgres.sguepnmeiwuckqbdtemp:[SUA-SENHA]@aws-1-sa-east-1.pooler.supabase.com:6543/postgres
+    ```
+    
+    A url deve ser obtida no próprio site do Supabase, deve-se substituir [SUA-SENHA] pela senha utilizada no banco de dados
 - Para inicializar o projeto é só executar o arquivo run.bat no diretório raiz, ele cuida da criação do ambiente virtual e da instalação das dependências.
-- Por questões de segurança, não subi o arquivo .env com os dados de conexão com o banco de dados
 ---
 
 ## 🚀 Funcionalidades
