@@ -58,3 +58,4 @@ CREATE TABLE countries (
     dislikes int4
 );
 ```
+3. Adicionar as informações de conexão do banco em um arquivo .env no diretório raiz
