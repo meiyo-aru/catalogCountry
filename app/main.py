@@ -4,7 +4,7 @@ from app.models.models import countries
 from app.db.connect_db import get_db
 from app.api.create_app import app
 from app.api.create_app import Session, Depends
-from app.schemas.models import countries_base, countries_out, paises_avaliar, rest_countries_model
+from app.schemas.models import paises_avaliar, rest_countries_model
 from fastapi import status, HTTPException
 
 def send_request(url: str, parameters: dict={}, timeout: int = 60) -> List:
