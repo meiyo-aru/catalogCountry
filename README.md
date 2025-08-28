@@ -4,6 +4,13 @@ Este projeto é uma **API** desenvolvida em Python com FastAPI, com o objetivo d
 
 ---
 
+## Informações importantes
+
+- Para inicializar o projeto é só executar o arquivo batch start.bat no diretório raiz
+- Por questões de segurança, não subi o arquivo .env com os dados de conexão com o banco de dados
+-  
+---
+
 ## 🚀 Funcionalidades
 
 - **Listar os 10 países mais populosos**
